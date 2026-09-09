@@ -1,0 +1,37 @@
+name: 메뉴·엑셀 열 조사
+
+# 새 수집 항목(유효기간별 재고)을 붙이기 전에 사방넷의 실제 메뉴 이름과
+# 엑셀 열 이름을 확인한다. 결과는 이 워크플로 로그에 그대로 찍힌다.
+on:
+  workflow_dispatch:
+
+jobs:
+  debug-menu-columns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: 메뉴와 엑셀 열 조사
+        run: python debug_menu_columns.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 스크린샷 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: menu-columns-result
+          path: |
+            *.png
+            *.txt

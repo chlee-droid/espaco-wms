@@ -1,0 +1,82 @@
+name: 매일 데이터 수집 (재고/입출고/발주)
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 오후 12:00 KST 목표 (= 03:00 UTC) → 정각 회피로 02:53 UTC = 11:53 KST
+    - cron: "53 2 * * *"
+    # 밤 9:00 KST 목표 (= 12:00 UTC) → 정각 회피로 11:57 UTC = 20:57 KST
+    - cron: "57 11 * * *"
+
+jobs:
+  collect-all:
+    runs-on: ubuntu-latest
+    # 구글 로그인을 위해 깃허브 토큰 권한을 허용합니다.
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - uses: actions/checkout@v4
+
+      # 구글 클라우드(BigQuery) 로그인 단계 - Workload Identity Federation(OIDC)
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          # TODO: 에스파코 GCP 프로젝트 번호로 바꿔 주세요 (gcloud projects describe espaco-wms-data --format='value(projectNumber)')
+          workload_identity_provider: 'projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions@espaco-wms-data.iam.gserviceaccount.com'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: 재고조회 다운로드
+        run: python download_stock.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 유효기간별 재고 다운로드
+        continue-on-error: true
+        run: python download_stock_lot.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 입출고내역 다운로드
+        continue-on-error: true
+        run: python download_inout.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 발주조회 다운로드
+        continue-on-error: true
+        run: python download_order.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: BigQuery 및 구글 시트로 데이터 전송
+        run: python process_and_upload.py
+        env:
+          SHEET_WEBHOOK_URL: ${{ secrets.SHEET_WEBHOOK_URL }}
+          SHEET_WEBHOOK_SECRET: ${{ secrets.SHEET_WEBHOOK_SECRET }}
+
+      - name: 결과물 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-collect-result
+          path: |
+            *.png
+            *.xlsx

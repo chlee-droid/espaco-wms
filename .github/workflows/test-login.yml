@@ -1,0 +1,33 @@
+name: WMS 로그인 테스트
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-login:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: 로그인 테스트 실행
+        run: python test_login.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 스크린샷 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: login-screenshots
+          path: "*.png"

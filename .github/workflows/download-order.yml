@@ -1,0 +1,35 @@
+name: 발주조회 다운로드 테스트
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download-order:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: 발주조회 다운로드 실행
+        run: python download_order.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 결과물 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: order-download-result
+          path: |
+            *.png
+            *.xlsx
