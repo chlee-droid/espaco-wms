@@ -5,10 +5,12 @@ import openpyxl
 import requests
 from google.cloud import bigquery
 
-WEBHOOK_URL = os.environ["SHEET_WEBHOOK_URL"]
-WEBHOOK_SECRET = os.environ["SHEET_WEBHOOK_SECRET"]
+# 발주 로그만 구글 시트 웹훅으로 간다. 웹앱을 아직 배포하지 않았다면 비어 있을 수 있는데,
+# 그때는 발주 전송만 건너뛰고 재고 수집은 그대로 돌게 한다.
+WEBHOOK_URL = os.environ.get("SHEET_WEBHOOK_URL", "").strip()
+WEBHOOK_SECRET = os.environ.get("SHEET_WEBHOOK_SECRET", "").strip()
 
-GCP_PROJECT_ID = "adp-wms-data"
+GCP_PROJECT_ID = "espaco-wms-data"
 BQ_DATASET = "wms_data"
 
 # 한국 표준시 (GitHub Actions 서버는 UTC라서 명시적으로 KST를 써야 함)
@@ -52,6 +54,12 @@ def read_excel_as_dicts(filepath):
 
 def send_to_sheet(payload_type, headers, rows, extra=None):
     """구글 시트 웹훅으로 전송 (사람이 손대야 하는 발주 로그만 여기로 옴)"""
+    if not WEBHOOK_URL:
+        print(f"[{payload_type}] SHEET_WEBHOOK_URL 이 없습니다. "
+              f"웹앱을 배포한 뒤 GitHub Secrets 에 넣어 주세요. 이번에는 건너뜁니다. "
+              f"({len(rows)}건)")
+        return
+
     payload = {
         "secret": WEBHOOK_SECRET,
         "type": payload_type,
