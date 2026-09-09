@@ -1,0 +1,68 @@
+name: 수집 테스트 (BigQuery 없이)
+
+# 사방넷에서 네 가지가 잘 받아지는지만 확인한다.
+# BigQuery 로 넣지 않으므로 GCP 프로젝트가 없어도 돌아간다.
+# 하나가 실패해도 나머지는 계속 받아서, 어디가 막혔는지 한 번에 알 수 있다.
+on:
+  workflow_dispatch:
+
+jobs:
+  test-collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 패키지 설치
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: 1. 재고조회(기본)
+        continue-on-error: true
+        run: python download_stock.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 2. 재고조회(유통기한)
+        continue-on-error: true
+        run: python download_stock_lot.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 3. 입출고내역
+        continue-on-error: true
+        run: python download_inout.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 4. 발주조회
+        continue-on-error: true
+        run: python download_order.py
+        env:
+          SB_COMPANY_CODE: ${{ secrets.SB_COMPANY_CODE }}
+          SB_USER_ID: ${{ secrets.SB_USER_ID }}
+          SB_PASSWORD: ${{ secrets.SB_PASSWORD }}
+
+      - name: 받은 엑셀 구조 확인
+        if: always()
+        run: python inspect_excels.py
+
+      - name: 결과물 저장
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: collect-test-result
+          retention-days: 3
+          path: |
+            *.png
+            *.xlsx
